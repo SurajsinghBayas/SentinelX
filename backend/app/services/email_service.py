@@ -14,6 +14,8 @@ from app.ml.phishing_model import phishing_model
 from app.ml.behavior_model import behavior_model
 from app.ml.url_detector import url_detector
 from app.ml.risk_engine import risk_engine
+from app.ml.sector_threat_model import sector_threat_model
+from app.ml.spear_phishing_detector import spear_phishing_detector
 from app.database.models.models import Threat, ThreatType, ThreatLevel
 from app.schemas.schemas import EmailAnalysisRequest, ThreatAnalysisResponse
 from app.core.logging import get_logger
@@ -58,16 +60,32 @@ class EmailService:
             request.sender, channel="email"
         )
 
-        # ── Step 5: Risk Score ────────────────────────────────────────────
+        # ── Step 5: Sector-Specific Threat Analysis ───────────────────────
+        user_sector = getattr(current_user, 'sector', 'general') if current_user else 'general'
+        sector_result = sector_threat_model.analyze(full_text, str(user_sector))
+
+        # ── Step 6: Spear-Phishing Targeting Analysis ─────────────────────
+        operator_name = getattr(current_user, 'name', None) if current_user else None
+        spear_result = spear_phishing_detector.analyze(
+            text=full_text,
+            sender=request.sender,
+            known_senders=getattr(request, 'known_senders', None),
+            operator_context=getattr(request, 'operator_context', None) or operator_name,
+            sector=str(user_sector),
+        )
+
+        # ── Step 7: Risk Score ────────────────────────────────────────────
         risk_result = risk_engine.compute(
             nlp_score=nlp_score,
-            behavior_score=behavior_result.behavioral_score,
+            behavior_score=behavior_result.behavioral_score + sector_result.sector_score,
             url_score=url_score,
             reputation_score=reputation_score,
             nlp_label=nlp_label,
             nlp_confidence=nlp_confidence,
-            behavior_reasons=behavior_result.reasons,
+            behavior_reasons=behavior_result.reasons + sector_result.reasons,
             url_reasons=url_reasons,
+            spear_phishing_score=spear_result.spear_phishing_score,
+            targeting_indicators=spear_result.targeting_indicators,
         )
 
         # ── Step 6: Persist Threat ────────────────────────────────────────
@@ -76,7 +94,7 @@ class EmailService:
             channel="email",
             sender=request.sender,
             subject=request.subject[:500],
-            content=request.body[:2000],  # store excerpt only
+            content=request.body[:2000],
             risk_score=risk_result.risk_score,
             nlp_score=nlp_score,
             behavior_score=behavior_result.behavioral_score,
@@ -88,6 +106,9 @@ class EmailService:
             reasons=risk_result.reasons,
             extracted_urls=extracted_urls,
             classification_label=nlp_label,
+            targeting_indicators=spear_result.targeting_indicators,
+            sector=str(user_sector),
+            spear_phishing_score=spear_result.spear_phishing_score,
             created_by=user_id,
         )
         db.add(threat)

@@ -39,6 +39,15 @@ class UserRole(str, enum.Enum):
     operator = "operator"
 
 
+class InfrastructureSector(str, enum.Enum):
+    power_grid = "power_grid"
+    transport  = "transport"
+    financial  = "financial"
+    telecom    = "telecom"
+    water      = "water"
+    general    = "general"   # default for non-CI operators
+
+
 class ThreatType(str, enum.Enum):
     email = "email"
     sms = "sms"
@@ -70,6 +79,11 @@ class User(Base):
     email = Column(String(255), unique=True, nullable=False, index=True)
     hashed_password = Column(String(255), nullable=False)
     role = Column(SAEnum(UserRole), default=UserRole.operator, nullable=False)
+    sector = Column(
+        SAEnum(InfrastructureSector),
+        default=InfrastructureSector.general,
+        nullable=False,
+    )
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
@@ -109,6 +123,11 @@ class Threat(Base):
     reasons = Column(JSON, nullable=True)           # list[str]
     extracted_urls = Column(JSON, nullable=True)    # list[str]
     classification_label = Column(String(100), nullable=True)
+    targeting_indicators = Column(JSON, nullable=True)  # list[str] — spear-phishing signals
+
+    # ─── Sector & Spear-Phishing ───────────────────
+    sector = Column(String(50), nullable=True)          # inherited from operator at analysis time
+    spear_phishing_score = Column(Float, nullable=True, default=0.0)
 
     # ─── Metadata ─────────────────────────────────
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)

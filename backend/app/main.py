@@ -21,6 +21,8 @@ from app.database.base import Base
 from app.database.session import engine
 from app.api.routes import auth, analyze, alerts, dashboard
 from app.api.middleware.logging import RequestLoggingMiddleware
+# Import SenderRecord so its table is created on startup
+from app.services.sender_history_service import SenderRecord  # noqa: F401
 
 # ─── Initialise logging first ─────────────────────────────────────────────────
 setup_logging()

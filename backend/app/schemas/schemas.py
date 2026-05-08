@@ -21,6 +21,11 @@ class UserRegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=8, max_length=128)
     role: str = Field(default="operator", pattern="^(admin|operator)$")
+    sector: str = Field(
+        default="general",
+        pattern="^(power_grid|transport|financial|telecom|water|general)$",
+        description="Infrastructure sector of the operator",
+    )
 
 
 class UserLoginRequest(BaseModel):
@@ -39,6 +44,7 @@ class UserResponse(BaseModel):
     name: str
     email: EmailStr
     role: str
+    sector: str
     is_active: bool
     created_at: datetime
 
@@ -54,6 +60,15 @@ class EmailAnalysisRequest(BaseModel):
     subject: str = Field(..., max_length=1000)
     body: str = Field(..., max_length=50_000)
     attachments: Optional[List[str]] = Field(default=None, description="Attachment filenames")
+    operator_context: Optional[str] = Field(
+        default=None,
+        max_length=500,
+        description="Operator's name, title, or role context for spear-phishing detection",
+    )
+    known_senders: Optional[List[str]] = Field(
+        default=None,
+        description="Email addresses the operator regularly receives mail from",
+    )
     async_processing: bool = Field(default=False, description="Process via Celery task queue")
 
 
@@ -64,6 +79,8 @@ class EmailAnalysisRequest(BaseModel):
 class SMSAnalysisRequest(BaseModel):
     sender: str = Field(..., max_length=50)
     message: str = Field(..., max_length=5000)
+    operator_context: Optional[str] = Field(default=None, max_length=500)
+    known_senders: Optional[List[str]] = Field(default=None)
     async_processing: bool = False
 
 
@@ -75,6 +92,27 @@ class CallAnalysisRequest(BaseModel):
     transcript: str = Field(..., max_length=100_000)
     caller_id: Optional[str] = Field(default=None, max_length=50)
     duration_seconds: Optional[int] = None
+
+
+class MessageAnalysisRequest(BaseModel):
+    """Request schema for messaging platform threat analysis."""
+    platform: str = Field(
+        ...,
+        pattern="^(whatsapp|telegram|slack|teams|signal|other)$",
+        description="Source messaging platform",
+    )
+    sender_id: str = Field(..., max_length=255, description="Sender ID or phone number")
+    sender_display_name: Optional[str] = Field(default=None, max_length=255)
+    message_text: str = Field(..., max_length=10_000)
+    is_forwarded: bool = Field(default=False, description="Whether message was forwarded")
+    forward_count: Optional[int] = Field(
+        default=None,
+        ge=0,
+        description="Number of times the message was forwarded (chain-forward indicator)",
+    )
+    operator_context: Optional[str] = Field(default=None, max_length=500)
+    known_senders: Optional[List[str]] = Field(default=None)
+    async_processing: bool = False
 
 
 class TranscriptionResponse(BaseModel):
@@ -100,8 +138,12 @@ class ThreatAnalysisResponse(BaseModel):
     behavior_score: float
     url_score: float
     reputation_score: float
-    processing_mode: str = "sync"  # sync | async
-    task_id: Optional[str] = None  # set when async_processing=True
+    spear_phishing_score: float = 0.0
+    targeting_indicators: List[str] = []
+    sector: Optional[str] = None
+    is_targeted_attack: bool = False
+    processing_mode: str = "sync"
+    task_id: Optional[str] = None
 
 
 # ──────────────────────────────────────────────────────────────────────────────

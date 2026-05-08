@@ -26,6 +26,8 @@ class RiskScoreResult:
     behavior_score: float
     url_score: float
     reputation_score: float
+    spear_phishing_score: float  # 0–100, new in PS alignment
+    targeting_indicators: List[str]  # spear-phishing signal descriptions
     explanation: str
 
 
@@ -34,10 +36,11 @@ class RiskEngine:
     Weighted risk scoring engine.
 
     Formula:
-        RiskScore = 0.35 * NLPScore
-                  + 0.25 * BehaviorScore
+        RiskScore = 0.30 * NLPScore
+                  + 0.20 * BehaviorScore
                   + 0.20 * URLScore
-                  + 0.20 * ReputationScore
+                  + 0.15 * ReputationScore
+                  + 0.15 * SpearPhishingScore   ← NEW
 
     Threat Levels:
         0–30   → LOW
@@ -56,6 +59,8 @@ class RiskEngine:
         nlp_confidence: float,
         behavior_reasons: List[str],
         url_reasons: List[str],
+        spear_phishing_score: float = 0.0,
+        targeting_indicators: Optional[List[str]] = None,
     ) -> RiskScoreResult:
         """
         Compute composite risk score and classify threat level.
@@ -78,7 +83,8 @@ class RiskEngine:
             settings.WEIGHT_NLP * nlp_score
             + settings.WEIGHT_BEHAVIOR * behavior_score
             + settings.WEIGHT_URL * url_score
-            + settings.WEIGHT_REPUTATION * reputation_score,
+            + settings.WEIGHT_REPUTATION * reputation_score
+            + 0.15 * spear_phishing_score,
             2,
         )
         risk_score = max(0.0, min(risk_score, 100.0))
@@ -101,10 +107,13 @@ class RiskEngine:
             all_reasons.append(f"NLP classified as '{nlp_label}' (score: {nlp_score:.1f})")
         all_reasons.extend(behavior_reasons)
         all_reasons.extend(url_reasons)
+        if targeting_indicators:
+            all_reasons.extend(targeting_indicators)
 
         # Human-readable explanation
         explanation = self._generate_explanation(
-            risk_score, threat_level, nlp_label, behavior_score, url_score, reputation_score
+            risk_score, threat_level, nlp_label, behavior_score,
+            url_score, reputation_score, spear_phishing_score
         )
 
         return RiskScoreResult(
@@ -118,6 +127,8 @@ class RiskEngine:
             behavior_score=behavior_score,
             url_score=url_score,
             reputation_score=reputation_score,
+            spear_phishing_score=spear_phishing_score,
+            targeting_indicators=targeting_indicators or [],
             explanation=explanation,
         )
 
@@ -140,6 +151,7 @@ class RiskEngine:
         behavior_score: float,
         url_score: float,
         reputation_score: float,
+        spear_phishing_score: float = 0.0,
     ) -> str:
         parts = [
             f"Overall risk score: {risk_score:.1f}/100 ({threat_level}).",
@@ -152,6 +164,12 @@ class RiskEngine:
             parts.append(f"Suspicious URL patterns found (score: {url_score:.1f}).")
         if reputation_score > 40:
             parts.append(f"Sender reputation is poor (score: {reputation_score:.1f}).")
+        if spear_phishing_score >= 40:
+            parts.append(
+                f"\u26a0\ufe0f TARGETED ATTACK DETECTED: Spear-phishing indicators present "
+                f"(score: {spear_phishing_score:.1f}). This message shows signs of being "
+                f"crafted specifically for this operator."
+            )
         return " ".join(parts)
 
     def compute_reputation_score(self, sender: str, channel: str = "email") -> float:

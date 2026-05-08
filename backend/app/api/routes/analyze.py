@@ -18,10 +18,13 @@ from app.services.email_service import email_service
 from app.services.sms_service import sms_service
 from app.services.call_service import call_service
 from app.services.alert_service import alert_service
+from app.services.messaging_service import messaging_service
+from app.services.sender_history_service import sender_history_service
 from app.schemas.schemas import (
     EmailAnalysisRequest,
     SMSAnalysisRequest,
     CallAnalysisRequest,
+    MessageAnalysisRequest,
     ThreatAnalysisResponse,
     TranscriptionResponse,
 )
@@ -82,6 +85,12 @@ def analyze_email(
         threat = db.query(Threat).filter(Threat.id == result.threat_id).first()
         if threat:
             background_tasks.add_task(alert_service.maybe_create_alert, threat, db)
+
+    # Record sender contact for future first-contact anomaly detection
+    background_tasks.add_task(
+        sender_history_service.record_contact,
+        current_user.id, request.sender, "email", result.risk_score, db
+    )
 
     return result
 
@@ -158,6 +167,41 @@ def analyze_call(
     return result
 
 
+# ─── Messaging Platform Analysis ───────────────────────────────────────────────
+
+@router.post(
+    "/analyze/message",
+    response_model=ThreatAnalysisResponse,
+    summary="Analyze a messaging platform message (WhatsApp, Telegram, Slack, Teams)",
+)
+def analyze_message(
+    request: MessageAnalysisRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ThreatAnalysisResponse:
+    """
+    Detect phishing and social engineering in messaging platform messages.
+
+    Supports WhatsApp, Telegram, Slack, Teams, Signal, and other platforms.
+    Chain-forwarded messages receive a risk multiplier as they are a common
+    vector for viral phishing campaigns targeting infrastructure operators.
+    """
+    result = messaging_service.analyze(
+        request,
+        db,
+        current_user=current_user,
+        user_id=current_user.id,
+    )
+
+    if result.threat_id:
+        threat = db.query(Threat).filter(Threat.id == result.threat_id).first()
+        if threat:
+            background_tasks.add_task(alert_service.maybe_create_alert, threat, db)
+
+    return result
+
+
 # ─── Audio Transcription ──────────────────────────────────────────────────────
 
 @router.post(
@@ -191,3 +235,30 @@ async def transcribe_audio(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(exc),
         )
+
+
+# ─── Sender History ───────────────────────────────────────────────────────────
+
+@router.get(
+    "/analyze/sender-history",
+    summary="Get risk profile for a specific sender",
+    tags=["Threat Analysis"],
+)
+def get_sender_history(
+    sender: str,
+    channel: str = "email",
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """
+    Return the contact history and risk profile for a specific sender.
+
+    Use this to surface 'First contact from this sender' warnings in the UI
+    before the operator opens or acts on a suspicious message.
+    """
+    return sender_history_service.get_profile(
+        user_id=current_user.id,
+        sender=sender,
+        channel=channel,
+        db=db,
+    )

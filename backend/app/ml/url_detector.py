@@ -65,6 +65,45 @@ class URLAnalysisResult:
 class URLDetector:
     """Extracts and scores URLs for malicious indicators."""
 
+    @staticmethod
+    def _levenshtein(a: str, b: str) -> int:
+        """Compute Levenshtein edit distance between two strings."""
+        m, n = len(a), len(b)
+        dp = list(range(n + 1))
+        for i in range(1, m + 1):
+            prev = dp[:]
+            dp[0] = i
+            for j in range(1, n + 1):
+                if a[i - 1] == b[j - 1]:
+                    dp[j] = prev[j - 1]
+                else:
+                    dp[j] = 1 + min(prev[j], dp[j - 1], prev[j - 1])
+        return dp[n]
+
+    def detect_lookalike(self, domain: str, sector: str = "general") -> Optional[str]:
+        """
+        Detect if a domain is a lookalike of a known authority domain.
+
+        Uses Levenshtein distance ≤2 to catch homograph attacks like:
+          paypa1.com → paypal.com
+          n3rc.com   → nerc.com
+          sw1ft.com  → swift.com
+
+        Returns the legitimate domain being spoofed, or None.
+        """
+        candidates = (
+            AUTHORITY_DOMAINS.get(sector, [])
+            + AUTHORITY_DOMAINS["general"]
+        )
+        domain_clean = domain.lower().replace("www.", "")
+        for legit in candidates:
+            if domain_clean == legit:
+                return None  # exact match — legitimate
+            distance = self._levenshtein(domain_clean, legit)
+            if 1 <= distance <= 2:
+                return legit
+        return None
+
     def extract_urls(self, text: str) -> List[str]:
         """Extract all HTTP/HTTPS URLs from a body of text."""
         return list(set(URL_REGEX.findall(text)))
@@ -107,6 +146,15 @@ class URLDetector:
             if ip_pattern.match(domain):
                 result.reasons.append("Raw IP address used as host")
                 score += 20.0
+
+            # Lookalike domain detection (sector-aware)
+            spoofed = self.detect_lookalike(domain, sector="general")
+            if spoofed:
+                result.reasons.append(
+                    f"Lookalike domain detected: '{domain}' mimics '{spoofed}' "
+                    f"(≤2 character edit distance)"
+                )
+                score += 60.0  # high weight — very strong phishing signal
 
         except Exception as exc:
             logger.warning(f"URL parsing error for {url}: {exc}")
