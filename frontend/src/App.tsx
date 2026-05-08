@@ -3,8 +3,9 @@ import Sidebar from './components/Sidebar';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Analyze from './pages/Analyze';
-
+import Alerts from './pages/Alerts';
 import Organization from './pages/Organization';
+import Playbooks from './pages/Playbooks';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const token = localStorage.getItem('sentinelx_token');
@@ -29,7 +30,9 @@ export default function App() {
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
         <Route path="/analyze" element={<ProtectedRoute><Analyze /></ProtectedRoute>} />
+        <Route path="/alerts" element={<ProtectedRoute><Alerts /></ProtectedRoute>} />
         <Route path="/organization" element={<ProtectedRoute><Organization /></ProtectedRoute>} />
+        <Route path="/playbooks" element={<ProtectedRoute><Playbooks /></ProtectedRoute>} />
       </Routes>
     </BrowserRouter>
   );
