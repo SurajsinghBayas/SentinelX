@@ -64,15 +64,15 @@ app = FastAPI(
 # ─── CORS ─────────────────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # Allow all origins including mobile clients
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 app.add_middleware(
-    TrustedHostMiddleware, 
-    allowed_hosts=["*"]
+    TrustedHostMiddleware,
+    allowed_hosts=["*"],  # Allow all hosts including mobile devices on LAN
 )
 
 # ─── Request Logging ──────────────────────────────────────────────────────────
