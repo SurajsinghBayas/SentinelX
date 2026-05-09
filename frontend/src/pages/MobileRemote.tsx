@@ -1,15 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
 import { 
-  Smartphone, ShieldAlert, Zap, Lock, Bell, CheckCircle2, 
-  Loader2, Send, MessageSquare, ShieldCheck, AlertTriangle,
+  Smartphone, ShieldAlert, Zap, Lock,
+  MessageSquare, ShieldCheck,
   User, ArrowLeft
 } from 'lucide-react';
 import api from '../lib/api';
 
 export default function MobileRemote() {
   const [mode, setMode] = useState<'controller' | 'victim'>('victim');
-  const [loading, setLoading] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [, setLoading] = useState<string | null>(null);
+  const [, setSuccess] = useState<string | null>(null);
   
   // Victim State
   const [incoming, setIncoming] = useState<any>(null);

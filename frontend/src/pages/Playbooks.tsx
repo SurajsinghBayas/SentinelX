@@ -1,4 +1,4 @@
-import { Zap, Shield, Lock, Bell, Mail, Eye, Activity, Settings2, Play, Pause, Trash2 } from 'lucide-react';
+import { Zap, Shield, Settings2, Play, Pause, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
 const PLAYBOOKS = [

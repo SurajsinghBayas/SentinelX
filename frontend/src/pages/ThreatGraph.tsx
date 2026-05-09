@@ -62,9 +62,28 @@ const generateGraphData = () => {
   return { nodes, links };
 };
 
+interface GraphNode {
+  id: string;
+  group: string;
+  size: number;
+  color: string;
+  x?: number;
+  y?: number;
+  fx?: number | null;
+  fy?: number | null;
+}
+
+interface GraphLink {
+  source: string;
+  target: string;
+  value: number;
+  color: string;
+  group?: string;
+}
+
 export default function ThreatGraph() {
-  const fgRef = useRef<ForceGraphMethods>();
-  const [graphData, setGraphData] = useState({ nodes: [], links: [] });
+  const fgRef = useRef<ForceGraphMethods<any> | null>(null);
+  const [graphData, setGraphData] = useState<{ nodes: GraphNode[]; links: GraphLink[] }>({ nodes: [], links: [] });
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -86,13 +105,15 @@ export default function ThreatGraph() {
   }, []);
 
   const handleZoomIn = useCallback(() => {
-    const currentZoom = fgRef.current?.zoom() || 1;
-    fgRef.current?.zoom(currentZoom * 1.5, 400);
+    const fg = fgRef.current as any;
+    const currentZoom = fg?.zoom() || 1;
+    fg?.zoom(currentZoom * 1.5, 400);
   }, []);
 
   const handleZoomOut = useCallback(() => {
-    const currentZoom = fgRef.current?.zoom() || 1;
-    fgRef.current?.zoom(currentZoom / 1.5, 400);
+    const fg = fgRef.current as any;
+    const currentZoom = fg?.zoom() || 1;
+    fg?.zoom(currentZoom / 1.5, 400);
   }, []);
 
   const handleFit = useCallback(() => {
@@ -164,7 +185,7 @@ export default function ThreatGraph() {
           linkDirectionalParticleWidth={2}
           linkDirectionalParticleSpeed={0.005}
           backgroundColor="hsl(var(--card))"
-          onNodeDragEnd={node => {
+          onNodeDragEnd={(node: any) => {
             node.fx = node.x;
             node.fy = node.y;
           }}

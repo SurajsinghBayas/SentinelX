@@ -1,14 +1,10 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
-  Shield, AlertTriangle, Activity, CheckCircle2, TrendingUp,
-  Mail, MessageSquare, Brain, RefreshCw, Clock, Zap, Eye,
-  ShieldAlert, ShieldCheck, BarChart2, Cpu, Users, Target,
-  Calendar, Info, ArrowUpRight, Globe, Lock, Bell
+  Shield, AlertTriangle, Activity, CheckCircle2,
+  Mail, MessageSquare, Brain, Clock,
+  ShieldCheck, Users, Target,
+  ArrowUpRight, Globe
 } from 'lucide-react';
-import {
-  AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
-} from 'recharts';
 import api from '../lib/api';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -50,11 +46,7 @@ interface TargetAnalytics {
 
 // ─── Constants & Helpers ──────────────────────────────────────────────────────
 
-const CHART_COLORS = ['#6366f1', '#a855f7', '#ec4899', '#f97316', '#10b981', '#06b6d4'];
 
-const formatTime = (date: Date) => {
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
-};
 
 const timeAgo = (iso: string) => {
   const diff = Date.now() - new Date(iso).getTime();
@@ -199,8 +191,8 @@ export default function Dashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [recentThreats, setRecentThreats] = useState<Threat[]>([]);
   const [targetAnalytics, setTargetAnalytics] = useState<TargetAnalytics | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [currentTime, setCurrentTime] = useState(new Date());
+  const [, setLoading] = useState(true);
+  const [, setCurrentTime] = useState(new Date());
 
   const fetchData = useCallback(async () => {
     try {
@@ -329,7 +321,7 @@ export default function Dashboard() {
                 <Users className="w-4 h-4" /> Most Targeted Departments
               </h3>
               <div className="space-y-6">
-                {targetAnalytics?.departments.slice(0, 8).map((d, i) => (
+                {targetAnalytics?.departments.slice(0, 8).map((d) => (
                   <div key={d.name} className="space-y-2.5">
                     <div className="flex justify-between items-end">
                       <span className="text-sm font-semibold text-foreground tracking-tight">{d.name}</span>

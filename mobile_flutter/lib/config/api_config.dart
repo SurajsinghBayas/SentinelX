@@ -1,13 +1,8 @@
 /// SentinelX API Configuration
-/// Using adb reverse tunnel: phone's localhost:8000 → PC's localhost:8000
-/// No WiFi needed — works over USB!
+/// Pointing to hosted backend on Render
 class ApiConfig {
-  // ─── Using USB tunnel (adb reverse tcp:8000 tcp:8000) ─────────────────
-  // This routes phone's localhost:8000 to your PC's localhost:8000 via USB
-  static const String _localIp = '127.0.0.1';
-  static const int _port = 8000;
-
-  static const String baseUrl = 'http://$_localIp:$_port';
+  // ─── Production Backend ────────────────────────────────────────────────────
+  static const String baseUrl = 'https://sentinelx-48vt.onrender.com';
   static const String apiUrl = '$baseUrl/api/v1';
 
   // ─── Endpoints ─────────────────────────────────────────────────────────────

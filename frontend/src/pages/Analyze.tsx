@@ -2,8 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import { 
   Mail, MessageSquare, Loader2, ShieldCheck, ShieldAlert, 
-  Phone,  Radar, RefreshCw, Smartphone, AlertTriangle, PlayCircle, ArrowRight,
-  Fingerprint, CheckCircle2, History, Zap, Mic2, Sparkles, Brain, Clock
+  Phone, RefreshCw, PlayCircle, ArrowRight,
+  Fingerprint, Zap, Mic2, Sparkles, Brain, Clock
 } from 'lucide-react';
 import api from '../lib/api';
 

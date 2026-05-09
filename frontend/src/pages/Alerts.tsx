@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { 
-  ShieldAlert, ShieldCheck, Clock, Search, Filter, 
+  ShieldAlert, ShieldCheck, Clock, 
   CheckCircle2, AlertTriangle, AlertCircle, Info, Activity,
   ArrowRight, Bell, Ban, XCircle
 } from 'lucide-react';
