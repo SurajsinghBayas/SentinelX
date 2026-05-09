@@ -98,9 +98,9 @@ class SmsMonitorService extends ChangeNotifier {
         }
         notifyListeners();
 
-        // Show notification if threat detected
+        // Only show notification for real threats (MEDIUM+, score >= 5.0)
         final risk = (result['risk_score'] ?? 0.0).toDouble();
-        if (result['threat_detected'] == true) {
+        if (risk >= 5.0) {
           NotificationService.showSmsThreatAlert(
             sender,
             risk,

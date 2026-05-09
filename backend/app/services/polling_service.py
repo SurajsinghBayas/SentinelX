@@ -1,6 +1,7 @@
 """
-Gmail Polling Service
-Orchestrates the fetch → analyze → store → alert pipeline for connected Gmail accounts.
+Email Polling Service
+Orchestrates the fetch → analyze → store → alert pipeline for ALL connected email accounts.
+Supports both OAuth Gmail accounts AND simple IMAP (App Password) accounts.
 """
 
 from __future__ import annotations
@@ -13,7 +14,6 @@ from sqlalchemy.orm import Session
 from app.core.logging import get_logger
 from app.database.models.models import EmailAccount, ThreatType
 from app.database.session import SessionLocal
-from app.services.gmail_service import gmail_service
 from app.services.alert_service import alert_service
 
 logger = get_logger(__name__)
@@ -22,28 +22,35 @@ logger = get_logger(__name__)
 class PollingService:
     """
     Core polling orchestrator.
-    Called by Celery beat every GMAIL_POLL_INTERVAL_SECONDS.
+    Called by APScheduler every GMAIL_POLL_INTERVAL_SECONDS.
+    Handles BOTH OAuth Gmail and simple IMAP accounts.
     """
 
     def poll_all_accounts(self) -> None:
         """
-        Main entry point for the Celery periodic task.
-        Fetches all active Gmail accounts and polls each one.
+        Main entry point for periodic polling.
+        Fetches ALL active email accounts (OAuth + IMAP) and polls each one.
         """
         db: Session = SessionLocal()
         try:
             accounts: List[EmailAccount] = (
                 db.query(EmailAccount)
                 .filter(EmailAccount.is_active == True)
-                .filter(EmailAccount.provider == "gmail")
+                .filter(EmailAccount.provider.in_(["gmail", "gmail_imap"]))
                 .all()
             )
 
-            logger.info(f"Polling {len(accounts)} active Gmail account(s).")
+            if not accounts:
+                return
+
+            logger.info(f"Polling {len(accounts)} active email account(s).")
 
             for account in accounts:
                 try:
-                    self._poll_single_account(account, db)
+                    if account.provider == "gmail_imap":
+                        self._poll_imap_account(account, db)
+                    else:
+                        self._poll_oauth_account(account, db)
                 except Exception as exc:
                     logger.error(
                         f"Error polling account {account.email_address}: {exc}",
@@ -53,10 +60,41 @@ class PollingService:
         finally:
             db.close()
 
-    def _poll_single_account(self, account: EmailAccount, db: Session) -> None:
-        """Fetch new emails for a single account and process each one."""
+    # ─── IMAP Polling (App Password) ─────────────────────────────────────────
 
-        # Refresh access token if needed
+    def _poll_imap_account(self, account: EmailAccount, db: Session) -> None:
+        """Fetch new emails via IMAP for simple App Password accounts."""
+        from app.services.simple_gmail_service import simple_gmail_service
+
+        if not account.access_token:
+            logger.warning(f"IMAP account {account.email_address} has no app password, skipping.")
+            return
+
+        emails = simple_gmail_service.fetch_recent_emails(
+            email_address=account.email_address,
+            app_password=account.access_token,
+            max_results=15,
+            since_date=account.last_synced_at,
+        )
+
+        if not emails:
+            logger.debug(f"No new emails for {account.email_address} (IMAP)")
+            self._update_sync_time(account, db)
+            return
+
+        logger.info(f"Fetched {len(emails)} new emails from {account.email_address} (IMAP)")
+
+        for email_data in emails:
+            self._process_email(email_data, account, db)
+
+        self._update_sync_time(account, db)
+
+    # ─── OAuth Polling ────────────────────────────────────────────────────────
+
+    def _poll_oauth_account(self, account: EmailAccount, db: Session) -> None:
+        """Fetch new emails via Gmail API for OAuth accounts."""
+        from app.services.gmail_service import gmail_service
+
         if not account.access_token:
             logger.warning(f"Account {account.email_address} has no access token, skipping.")
             return
@@ -74,6 +112,8 @@ class PollingService:
 
         self._update_sync_time(account, db)
 
+    # ─── Shared Processing ────────────────────────────────────────────────────
+
     def _process_email(
         self,
         email_data: dict,
@@ -82,9 +122,7 @@ class PollingService:
     ) -> None:
         """
         Run a single fetched email through the full threat analysis pipeline.
-        Imports here to avoid circular imports.
         """
-        # Lazy imports to avoid circular deps at module level
         from app.services.email_service import email_service
         from app.schemas.schemas import EmailAnalysisRequest
 

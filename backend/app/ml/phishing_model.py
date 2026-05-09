@@ -119,21 +119,21 @@ class PhishingModel:
         matches = sum(1 for p in COMPILED_PATTERNS if p.search(text))
         total_patterns = len(COMPILED_PATTERNS)
 
-        # More aggressive scoring: each match contributes significantly
-        # 1 match = suspicious, 2+ = likely scam, 4+ = definite scam
+        # Aggressive scoring: even 1 match should flag as suspicious
+        # 1 match = medium risk, 2+ = high, 4+ = critical
         if matches >= 6:
-            nlp_score = min(95.0, 60.0 + matches * 5.0)
+            nlp_score = min(98.0, 70.0 + matches * 4.0)
         elif matches >= 4:
-            nlp_score = min(85.0, 50.0 + matches * 7.0)
+            nlp_score = min(90.0, 60.0 + matches * 6.0)
         elif matches >= 2:
-            nlp_score = min(70.0, 30.0 + matches * 12.0)
+            nlp_score = min(80.0, 45.0 + matches * 10.0)
         elif matches >= 1:
-            nlp_score = 35.0
+            nlp_score = 50.0
         else:
             nlp_score = 0.0
 
         nlp_score = round(nlp_score, 2)
-        confidence = round(min(matches / 4.0, 1.0), 4)
+        confidence = round(min(matches / 3.0, 1.0), 4)
 
         # Determine label based on which patterns matched
         label = self._determine_label(text, nlp_score)

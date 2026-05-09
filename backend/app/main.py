@@ -21,7 +21,7 @@ from app.core.config import settings
 from app.core.logging import setup_logging, get_logger
 from app.database.base import Base
 from app.database.session import engine, warm_up_pool
-from app.api.routes import auth, analyze, alerts, dashboard, gmail, users, remote
+from app.api.routes import auth, analyze, alerts, dashboard, gmail, users, remote, simple_email
 from app.api.middleware.logging import RequestLoggingMiddleware
 
 # ─── Initialise logging first ─────────────────────────────────────────────────
@@ -141,6 +141,7 @@ app.include_router(dashboard.router, prefix="/api/v1")
 app.include_router(gmail.router, prefix="/api/v1")
 app.include_router(users.router, prefix="/api/v1")
 app.include_router(remote.router, prefix="/api/v1")
+app.include_router(simple_email.router, prefix="/api/v1")
 
 
 # ─── Health Check ─────────────────────────────────────────────────────────────

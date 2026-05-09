@@ -18,6 +18,9 @@ class ApiConfig {
   static const String alerts = '$apiUrl/alerts';
   static const String gmailConnect = '$apiUrl/gmail/connect';
   static const String gmailAccounts = '$apiUrl/gmail/accounts';
+  static const String emailConnect = '$apiUrl/email/connect';
+  static const String emailAccounts = '$apiUrl/email/accounts';
+  static const String emailScan = '$apiUrl/email/scan';
   static const String registerDevice = '$apiUrl/users/me/devices';
   static const String health = '$baseUrl/health';
 }

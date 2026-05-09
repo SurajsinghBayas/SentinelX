@@ -1,6 +1,9 @@
-/// Settings Screen — User profile, monitoring controls, connection status
+/// Settings Screen — User profile, monitoring controls, Email integration, connection status
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:http/http.dart' as http;
 import '../services/auth_service.dart';
 import '../services/api_service.dart';
 import '../services/sms_service.dart';
@@ -17,11 +20,15 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _backendOnline = false;
   bool _checkingHealth = true;
+  List<Map<String, dynamic>> _emailAccounts = [];
+  bool _loadingEmail = false;
+  bool _scanning = false;
 
   @override
   void initState() {
     super.initState();
     _checkBackend();
+    _fetchEmailAccounts();
   }
 
   Future<void> _checkBackend() async {
@@ -37,6 +44,220 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } else {
       if (mounted) setState(() => _checkingHealth = false);
     }
+  }
+
+  Future<void> _fetchEmailAccounts() async {
+    final auth = context.read<AuthService>();
+    if (auth.token == null) return;
+    setState(() => _loadingEmail = true);
+    try {
+      final resp = await http.get(
+        Uri.parse(ApiConfig.emailAccounts),
+        headers: auth.authHeaders,
+      );
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(resp.body);
+        if (mounted) setState(() => _emailAccounts = List<Map<String, dynamic>>.from(data));
+      }
+    } catch (e) {
+      debugPrint('Failed to fetch email accounts: $e');
+    } finally {
+      if (mounted) setState(() => _loadingEmail = false);
+    }
+  }
+
+  Future<void> _connectEmail(String email, String appPassword) async {
+    final auth = context.read<AuthService>();
+    if (auth.token == null) return;
+
+    try {
+      final resp = await http.post(
+        Uri.parse(ApiConfig.emailConnect),
+        headers: auth.authHeaders,
+        body: jsonEncode({
+          'email_address': email,
+          'app_password': appPassword,
+        }),
+      );
+
+      if (mounted) {
+        if (resp.statusCode == 200) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('✅ Gmail connected! Emails will be scanned automatically.'), backgroundColor: AppTheme.success),
+          );
+          _fetchEmailAccounts();
+        } else {
+          final err = jsonDecode(resp.body);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(err['detail'] ?? 'Connection failed'), backgroundColor: AppTheme.danger),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.danger),
+        );
+      }
+    }
+  }
+
+  Future<void> _scanNow() async {
+    final auth = context.read<AuthService>();
+    if (auth.token == null) return;
+    setState(() => _scanning = true);
+
+    try {
+      final resp = await http.post(
+        Uri.parse(ApiConfig.emailScan),
+        headers: auth.authHeaders,
+      );
+      if (mounted) {
+        if (resp.statusCode == 200) {
+          final data = jsonDecode(resp.body);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Scanned ${data['emails_scanned']} emails — ${data['threats_found']} threats found'),
+              backgroundColor: data['threats_found'] > 0 ? AppTheme.warning : AppTheme.success,
+            ),
+          );
+          _fetchEmailAccounts(); // refresh sync time
+        } else {
+          final err = jsonDecode(resp.body);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(err['detail'] ?? 'Scan failed'), backgroundColor: AppTheme.danger),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Scan error: $e'), backgroundColor: AppTheme.danger),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _scanning = false);
+    }
+  }
+
+  Future<void> _disconnectEmail(String accountId) async {
+    final auth = context.read<AuthService>();
+    if (auth.token == null) return;
+
+    try {
+      final resp = await http.delete(
+        Uri.parse('${ApiConfig.emailAccounts}/$accountId'),
+        headers: auth.authHeaders,
+      );
+      if (resp.statusCode == 200) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Email disconnected'), backgroundColor: AppTheme.success),
+          );
+        }
+        _fetchEmailAccounts();
+      }
+    } catch (e) {
+      debugPrint('Failed to disconnect: $e');
+    }
+  }
+
+  void _showConnectDialog() {
+    final emailCtrl = TextEditingController();
+    final passCtrl = TextEditingController();
+    bool connecting = false;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: AppTheme.surface,
+          title: const Row(
+            children: [
+              Icon(Icons.email, color: AppTheme.accent),
+              SizedBox(width: 8),
+              Text('Connect Gmail'),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppTheme.accent.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('How to get App Password:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                      SizedBox(height: 4),
+                      Text('1. Go to myaccount.google.com', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+                      Text('2. Security → 2-Step Verification', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+                      Text('3. App Passwords → Generate', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+                      Text('4. Select "Mail" → Copy the password', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                GestureDetector(
+                  onTap: () => launchUrl(
+                    Uri.parse('https://myaccount.google.com/apppasswords'),
+                    mode: LaunchMode.externalApplication,
+                  ),
+                  child: const Text(
+                    'Open Google App Passwords →',
+                    style: TextStyle(color: AppTheme.accent, fontSize: 12, fontWeight: FontWeight.bold, decoration: TextDecoration.underline),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: emailCtrl,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(
+                    labelText: 'Gmail Address',
+                    hintText: 'you@gmail.com',
+                    prefixIcon: Icon(Icons.email_outlined, size: 20),
+                    isDense: true,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: passCtrl,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'App Password',
+                    hintText: 'xxxx xxxx xxxx xxxx',
+                    prefixIcon: Icon(Icons.key, size: 20),
+                    isDense: true,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: connecting ? null : () async {
+                if (emailCtrl.text.isEmpty || passCtrl.text.isEmpty) return;
+                setDialogState(() => connecting = true);
+                await _connectEmail(emailCtrl.text.trim(), passCtrl.text.trim());
+                if (ctx.mounted) Navigator.pop(ctx);
+              },
+              child: connecting
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Text('Connect'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -140,6 +361,124 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 20),
 
+          // ─── Email Integration ────────────────────────────────────
+          _sectionTitle('Email Integration'),
+          if (_loadingEmail)
+            const Center(child: Padding(
+              padding: EdgeInsets.all(16),
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ))
+          else if (_emailAccounts.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: AppTheme.surface,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppTheme.accent.withOpacity(0.2)),
+              ),
+              child: Column(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppTheme.accent.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: const Icon(Icons.email, size: 36, color: AppTheme.accent),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text('Connect Gmail', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Scan incoming emails for phishing threats.\nJust need your email + a Google App Password.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: _showConnectDialog,
+                      icon: const Icon(Icons.link, size: 18),
+                      label: const Text('Connect Gmail Account'),
+                      style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else ...[
+            ..._emailAccounts.map((account) => Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppTheme.surface,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppTheme.success.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.email, color: AppTheme.success, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          account['email_address'] ?? '',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          account['last_synced_at'] != null
+                              ? 'Last scan: ${_formatDate(account['last_synced_at'])}'
+                              : 'Connected — ready to scan',
+                          style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.link_off, color: AppTheme.danger, size: 20),
+                    onPressed: () => _showDisconnectDialog(account['id'], account['email_address'] ?? ''),
+                  ),
+                ],
+              ),
+            )),
+            // Scan Now button
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _scanning ? null : _scanNow,
+                icon: _scanning
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.radar, size: 18),
+                label: Text(_scanning ? 'Scanning...' : 'Scan Emails Now'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  side: const BorderSide(color: AppTheme.accent),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: TextButton.icon(
+                onPressed: _showConnectDialog,
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('Add Another Account', style: TextStyle(fontSize: 12)),
+              ),
+            ),
+          ],
+          const SizedBox(height: 20),
+
           // ─── Info ────────────────────────────────────────────────
           _sectionTitle('About'),
           _settingTile(
@@ -169,6 +508,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ),
     );
+  }
+
+  void _showDisconnectDialog(String id, String email) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        title: const Text('Disconnect Email?'),
+        content: Text('Stop scanning $email for threats?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _disconnectEmail(id);
+            },
+            child: const Text('Disconnect', style: TextStyle(color: AppTheme.danger)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatDate(String iso) {
+    try {
+      final dt = DateTime.parse(iso);
+      final diff = DateTime.now().difference(dt);
+      if (diff.inMinutes < 1) return 'Just now';
+      if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+      if (diff.inHours < 24) return '${diff.inHours}h ago';
+      return '${diff.inDays}d ago';
+    } catch (_) {
+      return iso;
+    }
   }
 
   Widget _sectionTitle(String text) {

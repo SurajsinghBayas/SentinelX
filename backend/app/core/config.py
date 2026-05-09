@@ -63,7 +63,7 @@ class Settings(BaseSettings):
     # ─── Google OAuth / Gmail ─────────────────────────────────────────────────
     GOOGLE_CLIENT_ID: Optional[str] = None
     GOOGLE_CLIENT_SECRET: Optional[str] = None
-    GOOGLE_REDIRECT_URI: str = "http://localhost:8000/api/v1/gmail/callback"
+    GOOGLE_REDIRECT_URI: str = "https://sentinelx-48vt.onrender.com/api/v1/gmail/callback"
     GOOGLE_SCOPES: List[str] = [
         "https://www.googleapis.com/auth/gmail.readonly",
         "openid",
