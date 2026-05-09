@@ -145,8 +145,8 @@ class NotificationMonitorService extends ChangeNotifier {
             riskScore: risk,
             payload: 'threat:$appName:$sender',
           );
-        } else if (risk >= 3.1) {
-          // MEDIUM — warning
+        } else if (risk >= 5.0) {
+          // MEDIUM — warning (only score 5.0+)
           await NotificationService.showThreatAlert(
             title: '⚠️ Suspicious $appName Message',
             body: 'From $sender — Risk: ${risk.toStringAsFixed(1)}/10\n${reasons.isNotEmpty ? reasons.first : "Some suspicious patterns found"}',
