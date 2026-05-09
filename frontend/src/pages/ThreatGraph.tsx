@@ -63,7 +63,7 @@ const generateGraphData = () => {
 };
 
 export default function ThreatGraph() {
-  const fgRef = useRef<ForceGraphMethods>();
+  const fgRef = useRef<ForceGraphMethods | undefined>(undefined);
   const [graphData, setGraphData] = useState({ nodes: [], links: [] });
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
   const containerRef = useRef<HTMLDivElement>(null);
@@ -165,8 +165,9 @@ export default function ThreatGraph() {
           linkDirectionalParticleSpeed={0.005}
           backgroundColor="hsl(var(--card))"
           onNodeDragEnd={node => {
-            node.fx = node.x;
-            node.fy = node.y;
+            const n = node as any;
+            n.fx = n.x;
+            n.fy = n.y;
           }}
         />
         
