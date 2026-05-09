@@ -100,15 +100,7 @@ class NotificationMonitorService extends ChangeNotifier {
     }
     notifyListeners();
 
-    // Always show an "intercepted" notification immediately
-    await NotificationService.showThreatAlert(
-      title: '🔍 Scanning $appName message',
-      body: 'From $sender — Analyzing for threats...',
-      riskScore: 0.0,
-      payload: 'scan:$appName:$sender',
-    );
-
-    // Analyze via backend
+    // Analyze via backend (no notification until result is ready)
     if (_apiService != null && message.isNotEmpty) {
       try {
         final senderInfo = '$appName — $sender';
@@ -144,7 +136,7 @@ class NotificationMonitorService extends ChangeNotifier {
         notifData['threat_level'] = threatLevel;
         notifyListeners();
 
-        // Show result notification — ALWAYS show the result
+        // Only show notification if threat is MEDIUM or higher
         if (risk >= 6.1) {
           // HIGH/CRITICAL — urgent alert
           await NotificationService.showThreatAlert(
@@ -161,18 +153,10 @@ class NotificationMonitorService extends ChangeNotifier {
             riskScore: risk,
             payload: 'warning:$appName:$sender',
           );
-        } else {
-          // LOW — safe
-          await NotificationService.showThreatAlert(
-            title: '✅ $appName Message Safe',
-            body: 'From $sender — Risk: ${risk.toStringAsFixed(1)}/10 — No threats detected',
-            riskScore: risk,
-            payload: 'safe:$appName:$sender',
-          );
         }
+        // LOW risk — no notification, just log silently
       } catch (e) {
         debugPrint('[SentinelX] Notification analysis error: $e');
-        // Still update the notification data
         notifData['analyzed'] = true;
         notifData['threat_level'] = 'ERROR';
         notifyListeners();
