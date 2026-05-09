@@ -58,23 +58,49 @@ class RiskEngine:
     ) -> RiskScoreResult:
         """
         Compute composite risk score (1-10) and classify threat level.
+        All sub-scores come in on a 0-100 scale, we scale to 1-10.
         """
-        # Weighted composite score (0-100 internally)
+        # Scale each sub-score from 0-100 to 0-10
+        nlp_10 = nlp_score / 10.0
+        beh_10 = behavior_score / 10.0
+        url_10 = url_score / 10.0
+        rep_10 = reputation_score / 10.0
+
+        # Weighted composite (already on 0-10 scale)
         raw_score = (
-            settings.WEIGHT_NLP * nlp_score
-            + settings.WEIGHT_BEHAVIOR * behavior_score
-            + settings.WEIGHT_URL * url_score
-            + settings.WEIGHT_REPUTATION * reputation_score
+            settings.WEIGHT_NLP * nlp_10
+            + settings.WEIGHT_BEHAVIOR * beh_10
+            + settings.WEIGHT_URL * url_10
+            + settings.WEIGHT_REPUTATION * rep_10
         )
+
+        # Boost: if ANY model flags it as dangerous, ensure minimum score
+        # This prevents "2 out of 4 models say dangerous" from averaging to LOW
+        max_sub = max(nlp_10, beh_10, url_10, rep_10)
+        if max_sub >= 5.0 and raw_score < 4.0:
+            raw_score = max(raw_score, max_sub * 0.7)
         
-        # Scale to 1–10 band
-        risk_score = round(max(1.0, min(raw_score / 10.0, 10.0)), 2)
+        # Label-based floor: known threat labels get minimum scores
+        label_floors = {
+            "phishing": 5.5,
+            "scam": 5.0,
+            "credential_theft": 7.0,
+            "malicious_link": 5.0,
+            "impersonation": 4.0,
+            "financial_fraud": 6.5,
+            "lottery_scam": 6.0,
+            "kyc_scam": 6.5,
+        }
+        floor = label_floors.get(nlp_label, 1.0)
+        raw_score = max(raw_score, floor)
+
+        risk_score = round(max(1.0, min(raw_score, 10.0)), 2)
 
         # Threat level classification
         threat_level = self._classify_level(risk_score)
         threat_detected = risk_score >= settings.ALERT_TRIGGER_THRESHOLD
 
-        # Combined confidence (weighted average)
+        # Combined confidence
         confidence = round(
             (nlp_confidence * 0.5)
             + (min(behavior_score / 100, 1.0) * 0.3)
@@ -85,13 +111,13 @@ class RiskEngine:
         # Merge reasons
         all_reasons: List[str] = []
         if nlp_label != "safe":
-            all_reasons.append(f"NLP classified as '{nlp_label}' (score: {nlp_score/10:.1f}/10)")
+            all_reasons.append(f"NLP classified as '{nlp_label}' (score: {nlp_10:.1f}/10)")
         all_reasons.extend(behavior_reasons)
         all_reasons.extend(url_reasons)
 
-        # Human-readable explanation (scaled)
+        # Human-readable explanation
         explanation = self._generate_explanation(
-            risk_score, threat_level, nlp_label, behavior_score/10, url_score/10, reputation_score/10
+            risk_score, threat_level, nlp_label, beh_10, url_10, rep_10
         )
 
         return RiskScoreResult(
@@ -101,10 +127,10 @@ class RiskEngine:
             confidence=confidence,
             classification_label=nlp_label,
             reasons=all_reasons,
-            nlp_score=round(nlp_score/10, 2),
-            behavior_score=round(behavior_score/10, 2),
-            url_score=round(url_score/10, 2),
-            reputation_score=round(reputation_score/10, 2),
+            nlp_score=round(nlp_10, 2),
+            behavior_score=round(beh_10, 2),
+            url_score=round(url_10, 2),
+            reputation_score=round(rep_10, 2),
             explanation=explanation,
         )
 
